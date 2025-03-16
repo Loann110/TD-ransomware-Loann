@@ -28,7 +28,13 @@ class SecretManager:
         self._log = logging.getLogger(self.__class__.__name__)
 
     def do_derivation(self, salt:bytes, key:bytes)->bytes:
-        raise NotImplemented()
+        #génèration d'une clé dérivée avec PBKDF2HMAC
+        
+        kdf = PBKDF2HMAC( 
+                algorithm=hashes.SHA256(), #renforce la sécurité
+                length=self.KEY_LENGTH, #longueur de la clé finale
+                salt=salt, #utilisation du sel
+                
 
 
     def create(self)->Tuple[bytes, bytes, bytes]:
